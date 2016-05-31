@@ -139,7 +139,7 @@ def get_widget(name):
     return xml.get_widget(name)
 
 class DreamPie(SimpleGladeApp):
-    def __init__(self, pyexec, runfile):
+    def __init__(self, pyexec, runfile, kernel=None):
         """
         pyexec - the Python interpreter executable
         runfile - a filename to run upon startup, or None.
@@ -236,7 +236,7 @@ class DreamPie(SimpleGladeApp):
                                    INDENT_WIDTH)
 
         self.subp = SubprocessHandler(
-            pyexec, data_dir,
+            pyexec, data_dir, kernel,
             self.on_stdout_recv, self.on_stderr_recv, self.on_object_recv,
             self.on_subp_terminated)
         # Number of RPC calls that timed out and expecting results
@@ -1469,6 +1469,8 @@ def main():
     parser.add_option("--run", dest="runfile",
                       help="A file to run upon initialization. It will be "
                       "run only once.")
+    parser.add_option("--kernel", dest="kernel",
+                      help="The address of a dreampie kernel (host:port).")
     if sys.platform == 'win32':
         parser.add_option("--hide-console-window", action="store_true",
                           dest="hide_console",
@@ -1499,6 +1501,8 @@ def main():
         from .hide_console_window import hide_console_window
         hide_console_window()
 
+    kernel = tuple(opts.kernel.split(':')) if opts.kernel else None
+
     gtk.widget_set_default_direction(gtk.TEXT_DIR_LTR)
-    _dp = DreamPie(pyexec, opts.runfile)
+    _dp = DreamPie(pyexec, opts.runfile, kernel)
     gtk.main()

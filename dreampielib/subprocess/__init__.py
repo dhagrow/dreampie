@@ -177,10 +177,7 @@ def mask_sigint():
         pass
 
 class Subprocess(object):
-    def __init__(self, port):
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.connect(('localhost', port))
-
+    def __init__(self, port=None, locs=None):
         # Mask SIGINT/Ctrl-C
         mask_sigint()
         
@@ -193,6 +190,9 @@ class Subprocess(object):
         mainmodule = types.ModuleType('__main__')
         sys.modules['__main__'] = mainmodule
         self.locs = mainmodule.__dict__
+        if locs:
+            self.locs.update(locs)
+        print('locs:', self.locs)
         
         # Add '' to sys.path, to be like the regular Python interpreter
         sys.path.insert(0, '')
@@ -222,14 +222,38 @@ class Subprocess(object):
         # The result history index of the next value to enter the history
         self.reshist_counter = 0
 
+        if port:
+            self.connect(port)
+        else:
+            self.bind()
+
         # Run endless loop
         self.loop()
+
+    def connect(self, port):
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.connect(('localhost', port))
+
+    def bind(self):
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        s.bind(('localhost', 0))
+        s.listen()
+
+        port = s.getsockname()[1]
+        sys.stdout.write('Listening on port %s ...\n' % port)
+
+        self.sock, addr = s.accept()
 
     def loop(self):
         while True:
             if not self.idle_paused:
                 self.handle_gui_events(self.sock)
-            funcname, args = recv_object(self.sock)
+            try:
+                funcname, args = recv_object(self.sock)
+            except socket.error as e:
+                sys.stderr.write('Exiting dreampie handler: %s\n' % e)
+                return
             if funcname in rpc_funcs:
                 func = getattr(self, funcname)
                 try:
@@ -1044,5 +1068,5 @@ class TkHandler(GuiHandler):
         time.sleep(delay)
         return True
 
-def main(port):
-    _subp = Subprocess(port)
+def main(port=None, locals=None):
+    _subp = Subprocess(port=port, locs=locals)

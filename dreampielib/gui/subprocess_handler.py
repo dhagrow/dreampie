@@ -78,10 +78,11 @@ class SubprocessHandler(object):
     (This happens when not waiting for a function's return value.)
     """
 
-    def __init__(self, pyexec, data_dir,
+    def __init__(self, pyexec, data_dir, kernel,
                  on_stdout_recv, on_stderr_recv, on_object_recv,
                  on_subp_terminated):
         self._pyexec = pyexec
+        self._kernel = kernel
         self._data_dir = data_dir
         self._on_stdout_recv = on_stdout_recv
         self._on_stderr_recv = on_stderr_recv
@@ -97,27 +98,29 @@ class SubprocessHandler(object):
         # no choice, and it allows us to do it all by ourselves, not use
         # gobject's functionality.
         gobject.timeout_add(10, self._manage_subp)
+
+    def connect(self):
+        self._sock = s = socket.create_connection(self._kernel)
+        s.setblocking(True)
+
+    def bind(self):
+        # Find a socket to listen to
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        s.bind(('localhost', 0))
+        port = s.getsockname()[1]
+        # Now the socket is bound to port.
+        return s, port
         
     def start(self):
         if self._popen is not None:
             raise ValueError("Subprocess is already living")
-        # Find a socket to listen to
-        ports = range(10000, 10100)
-        random.shuffle(ports)
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        for port in ports:
-            #debug("Trying to listen on port %d..." % port)
-            try:
-                s.bind(('localhost', port))
-            except socket.error:
-                #debug("Failed.")
-                pass
-            else:
-                #debug("Ok.")
-                break
-        else:
-            raise IOError("Couldn't find a port to bind to")
-        # Now the socket is bound to port.
+
+        if self._kernel:
+            self.connect()
+            return
+
+        s, port = self.bind()
 
         #debug("Spawning subprocess")
         env = os.environ.copy()
@@ -162,30 +165,30 @@ class SubprocessHandler(object):
 
     def _manage_subp(self):
         popen = self._popen
-        if popen is None:
-            # Just continue looping - there's no subprocess.
-            return True
+        #if popen is None:
+            ## Just continue looping - there's no subprocess.
+            #return True
 
         # Check if exited
-        rc = popen.poll()
-        if rc is not None:
-            if time.time() - self._last_kill_time > 10:
-                debug("Process terminated unexpectedly with rc %r" % rc)
-            self._sock.close()
-            self._sock = None
-            self._popen = None
-            self._on_subp_terminated()
-            return True
+        #rc = popen.poll()
+        #if rc is not None:
+            #if time.time() - self._last_kill_time > 10:
+                #debug("Process terminated unexpectedly with rc %r" % rc)
+            #self._sock.close()
+            #self._sock = None
+            #self._popen = None
+            #self._on_subp_terminated()
+            #return True
 
         # Read from stdout
-        r = popen.recv()
-        if r:
-            self._on_stdout_recv(r.decode('utf8', 'replace'))
+        #r = popen.recv()
+        #if r:
+            #self._on_stdout_recv(r.decode('utf8', 'replace'))
 
         # Read from stderr
-        r = popen.recv_err()
-        if r:
-            self._on_stderr_recv(r.decode('utf8', 'replace'))
+        #r = popen.recv_err()
+        #if r:
+            #self._on_stderr_recv(r.decode('utf8', 'replace'))
         
         # Read from socket
         if self.wait_for_object(0):
@@ -206,8 +209,8 @@ class SubprocessHandler(object):
 
     def send_object(self, obj):
         """Send an object to the subprocess"""
-        if self._popen is None:
-            raise ValueError("Subprocess not living")
+        #if self._popen is None:
+            #raise ValueError("Subprocess not living")
         send_object(self._sock, obj)
 
     def wait_for_object(self, timeout_s):
@@ -219,21 +222,23 @@ class SubprocessHandler(object):
     
     def recv_object(self):
         """Wait for an object from the subprocess and return it"""
-        if self._popen is None:
-            raise ValueError("Subprocess not living")
+        #if self._popen is None:
+            #raise ValueError("Subprocess not living")
         return recv_object(self._sock)
 
     def write(self, data):
         """Write data to stdin"""
-        if self._popen is None:
-            raise ValueError("Subprocess not living")
-        self._popen.stdin.write(data.encode('utf8'))
+        #if self._popen is None:
+            #raise ValueError("Subprocess not living")
+        #self.send_object(data)
+        #self._popen.stdin.write(data.encode('utf8'))
 
     def kill(self):
         """Kill the subprocess.
         If the event loop continues, will start another one."""
         if self._popen is None:
-            raise ValueError("Subprocess not living")
+            return
+            #raise ValueError("Subprocess not living")
         if sys.platform != 'win32':
             # Send SIGTERM, and if the process didn't terminate within 1 second,
             # send SIGKILL.
