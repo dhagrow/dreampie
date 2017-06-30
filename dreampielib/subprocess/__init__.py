@@ -192,7 +192,6 @@ class Subprocess(object):
         self.locs = mainmodule.__dict__
         if locs:
             self.locs.update(locs)
-        print('locs:', self.locs)
         
         # Add '' to sys.path, to be like the regular Python interpreter
         sys.path.insert(0, '')
